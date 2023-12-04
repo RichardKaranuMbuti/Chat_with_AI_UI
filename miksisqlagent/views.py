@@ -217,8 +217,11 @@ def process_request(request):
 
     try:
         # Create an agent and run it with the query
-        agent = create_agent()  # Ensure this function is defined elsewhere in your code
-        response = agent.run(query)  # Ensure your agent has a run method that accepts a query
+        print("before agent status")
+        agent = create_agent()  
+        print("agent created")
+        response = agent.run(query) 
+        print("response obtained")
     except Exception as e:
         # Handle any errors during agent creation or execution
         return JsonResponse({'error': 'Error processing request', 'details': str(e)}, status=500)
