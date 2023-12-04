@@ -25,7 +25,7 @@ SECRET_KEY = "django-insecure-*ick6lkl#k*%+8**h6(w9$euz(rhmvse))33v&)q^aicnajy_c
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['miksi.pythonanywhere.com']
 
 
 # Application definition
@@ -79,12 +79,31 @@ WSGI_APPLICATION = "MiksiAI.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+DJANGO_ENV = os.environ.get('DJANGO_ENV')
+
+
+if DJANGO_ENV == 'production':
+
+    DATABASES = {
+        'default': {
+            'ENGINE': os.environ.get("ENGINE"),
+            'NAME': os.environ.get("NAME"),
+            'USER': os.environ.get("USER"),
+            'PASSWORD': os.environ.get("PASSWORD"),
+            'HOST': os.environ.get("HOST"),
+            'PORT': os.environ.get("PORT"),
+        }
     }
-}
+else:
+    # Development DB Configs
+    BASE_DIR = Path(__file__).resolve().parent.parent
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
+
 
 
 # Password validation

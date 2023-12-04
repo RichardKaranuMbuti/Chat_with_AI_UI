@@ -1,16 +1,16 @@
 import pandas as pd
 from sqlalchemy import create_engine
-import os 
+import os
 from dotenv import load_dotenv
 from sqlalchemy import text
 
-load_dotenv() 
+load_dotenv()
 
 # Replace the following with your MySQL server details
 username = os.getenv("db_user")
 password = os.getenv("password")
 host = os.getenv("db_host")
-database_name = 'metakocka_db'
+database_name = os.getenv("database_name")
 
 # Creating the database connection
 engine = create_engine(f'mysql+mysqlconnector://{username}:{password}@{host}/{database_name}')
