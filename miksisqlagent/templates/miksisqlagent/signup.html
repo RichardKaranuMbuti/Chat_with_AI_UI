@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Miski AI</title>
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet"> <!-- Importing Roboto font -->
+</head>
+{% block extra_styles %}
+<style>
+    /* Styles for the flash message */
+    .flash-message {
+        background-color: #4CAF50;
+        color: white;
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 15px;
+        border-radius: 5px;
+        z-index: 1000;
+        display: none; /* Initially hidden */
+    }
+
+    .flash-message .close-btn {
+        float: right;
+        font-size: 20px;
+        cursor: pointer;
+    }
+
+    /* Centered container for the form */
+    .centered-form-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 80vh;  /* Adjust based on your preference */
+    }
+
+    .bordered-form {
+        width: 100%;
+        max-width: 400px;  /* Control the width of the form */
+        padding: 20px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+    }
+    * Additional styles for improved form appearance */
+    .centered-form-container {
+        background-color: #f8f9fa; /* Light background for the form area */
+        box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2); /* Adding a subtle shadow */
+        margin-top: 50px; /* Extra spacing at the top */
+    }
+
+    .bordered-form {
+        background-color: white; /* White background for the form */
+        margin: 20px; /* Spacing around the form */
+    }
+
+    .legend-title {
+        text-align: center;
+        margin-bottom: 20px;
+        margin-top: 100px;
+        font-weight: bold;
+        color: #333;
+    }
+</style>
+{% endblock %}
+
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <a class="navbar-brand" href="#">Miksi AI</a>
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav">
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'show_login' %}">Log In</a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+    
+{% block content %}
+<!-- Centered container for the form -->
+<div class="centered-form-container">
+    <div class="bordered-form">
+        <!-- Signup form with Bootstrap styling -->
+        <form id="signupForm" class="mt-4">
+            <legend class="legend-title">Join Miksi Today</legend>
+            <div class="form-group">
+                <label for="first_name">First Name:</label>
+                <input type="text" id="first_name" name="first_name" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label for="last_name">Last Name:</label>
+                <input type="text" id="last_name" name="last_name" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label for="email">Email:</label>
+                <input type="email" id="email" name="email" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" id="password" name="password" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label for="confirm_password">Confirm Password:</label>
+                <input type="password" id="confirm_password" name="confirm_password" class="form-control" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Signup</button>
+            <div class="mt-3 text-center small">
+                Have an account? <a href="{% url 'show_login' %}" class="btn btn-link">Log in</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Flash message -->
+<div class="flash-message">
+    <span class="message"></span>
+    <span class="close-btn" onclick="closeFlashMessage()">×</span>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    const signupForm = document.getElementById("signupForm");
+    const flashMessage = document.querySelector(".flash-message");
+    const flashMessageText = document.querySelector(".flash-message .message");
+
+    signupForm.addEventListener("submit", function(event) {
+        event.preventDefault();
+        
+        const formData = new FormData(signupForm);
+
+        fetch("/miksi/signup/", {
+            method: "POST",
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log(data);
+            if (data.status === 200) {
+                // Show success message and then redirect after a short delay
+                showFlashMessage(data.message, true);
+                setTimeout(() => {
+                    window.location.href = data.redirect_url; // Redirect to the login page
+                }, 2000); // Adjust the delay as needed
+            } else {
+                // Show error message without redirecting
+                showFlashMessage(data.message, false);
+            }
+        });
+    });
+
+    function showFlashMessage(message, isSuccess) {
+        flashMessageText.innerText = message;
+
+        if (!isSuccess) {
+            flashMessage.style.backgroundColor = "#f44336";  // Red background for error
+        } else {
+            flashMessage.style.backgroundColor = "#4CAF50";  // Green background for success
+        }
+
+        flashMessage.style.display = "block";
+
+        setTimeout(() => {
+            if (!isSuccess) {
+                closeFlashMessage();
+            }
+        }, 5000); // Keep the success message visible until the page redirects
+    }
+
+    function closeFlashMessage() {
+        flashMessage.style.display = "none";
+    }
+</script>
+
+{% endblock %}
+</body>
+</html>
+
+
+
+

@@ -199,25 +199,58 @@ def create_agent():
     # If everything went well, return a success response
     return agent
 
+from django.conf import settings
+
 @csrf_exempt
 def process_request(request):
     # Check if user is logged in via session
-    user_id = request.session.get('user_id')
-    if not user_id:
-        return JsonResponse({'error': 'User not logged in or session expired'}, status=401)
 
     # Check if query is provided
     query = request.POST.get("query")
     if not query:
         return JsonResponse({'error': 'No query provided'}, status=400)
 
+    # Get the initial state of the directory
+    images_dir = os.path.join(settings.BASE_DIR, 'media/images')
+    initial_files = {f: os.path.getmtime(os.path.join(images_dir, f)) 
+                     for f in os.listdir(images_dir) if os.path.isfile(os.path.join(images_dir, f))}
+
     try:
         # Create an agent and run it with the query
-        agent = create_agent()
-        response = agent.run(query)
+        agent = create_agent()  # Ensure this function is defined elsewhere in your code
+        response = agent.run(query)  # Ensure your agent has a run method that accepts a query
     except Exception as e:
         # Handle any errors during agent creation or execution
         return JsonResponse({'error': 'Error processing request', 'details': str(e)}, status=500)
-    # Return the agent's response
-    return JsonResponse({'response': response})
-    
+
+    # Check the directory after execution
+    final_files = {f: os.path.getmtime(os.path.join(images_dir, f)) 
+                   for f in os.listdir(images_dir) if os.path.isfile(os.path.join(images_dir, f))}
+
+    # Detect new or modified files
+    new_or_modified_files = [f for f in final_files if f not in initial_files or final_files[f] != initial_files.get(f)]
+
+    # Prepare the response
+    response_data = {'response': response}
+
+    # If there's a new or modified file, add its path to the response
+    if new_or_modified_files:
+        new_file = new_or_modified_files[0]  # First new or modified file
+        image_url = settings.MEDIA_URL + 'images/' + new_file
+        response_data['image'] = request.build_absolute_uri(image_url)
+
+    return JsonResponse(response_data)
+
+# Render templates
+def render_signup(request):
+    return render(request, 'miksisqlagent/signup.html')
+
+def render_home(request):
+    return render(request, 'miksisqlagent/base.html')
+
+
+def show_login_template(request):
+    return render(request, 'miksisqlagent/login.html')
+
+def chat_page(request):
+    return render( request, 'miksisqlagent/chat.html')

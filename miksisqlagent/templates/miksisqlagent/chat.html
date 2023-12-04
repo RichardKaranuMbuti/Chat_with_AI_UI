@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chat Agent</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        /* Inline CSS for styling */
+        #chat-area {
+            height: 500px; /* Increased height */
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 15px; /* Increased padding for better margin */
+            margin-bottom: 20px; /* Increased margin */
+        }
+        .message {
+            margin: 10px; /* Increased margin */
+            padding: 10px; /* Increased padding */
+            border-radius: 10px;
+        }
+        .sent {
+            text-align: right;
+        }
+        .received {
+            text-align: left;
+        }
+        .message-text {
+            display: inline-block;
+            max-width: 70%;
+            padding: 10px; /* Increased padding */
+            border-radius: 12px;
+        }
+        .spinner-border {
+            display: none;
+            width: 1.5rem;
+            height: 1.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="chat-area"></div>
+        <div class="input-group mb-3">
+            <input type="text" id="message-input" class="form-control" placeholder="Enter your message...">
+            <div class="input-group-append">
+                <button class="btn btn-outline-secondary" type="button" id="send-button">Send</button>
+                <div class="spinner-border text-primary" role="status" id="loading-spinner">
+                    <span class="sr-only">Loading...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap and jQuery -->
+    <script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+
+    <script>
+        $(document).ready(function() {
+            function sendMessage() {
+                var message = $('#message-input').val();
+                if (message) {
+                    $('#chat-area').append('<div class="message sent"><span class="message-text bg-primary text-white">' + message + '</span></div>');
+                    $('#message-input').val('');
+                    $('#message-input').prop('disabled', true);
+                    $('#send-button').prop('disabled', true);
+                    $('#loading-spinner').show();
+
+                    $.post("{% url 'chat_database' %}", { query: message }, function(data) {
+                        var responseHtml = '<div class="message received"><span class="message-text bg-light">';
+                        if (data.image) {
+                            responseHtml += '<img src="' + data.image + '" style="max-width: 100%; height: auto;"><br>';
+                        }
+                        responseHtml += data.response + '</span></div>';
+                        $('#chat-area').append(responseHtml);
+                    }).always(function() {
+                        $('#message-input').prop('disabled', false);
+                        $('#send-button').prop('disabled', false);
+                        $('#loading-spinner').hide();
+                    });
+                }
+            }
+
+            $('#send-button').click(sendMessage);
+
+            $('#message-input').keypress(function(e) {
+                if (e.which == 13) { // Enter key pressed
+                    sendMessage();
+                    return false; // Prevent form submit
+                }
+            });
+        });
+    </script>
+</body>
+</html>
