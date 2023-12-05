@@ -79,19 +79,19 @@ WSGI_APPLICATION = "MiksiAI.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-DJANGO_ENV = os.environ.get('DJANGO_ENV')
+DJANGO_ENV = os.getenv('DJANGO_ENV')
 
 
 if DJANGO_ENV == 'production':
 
     DATABASES = {
         'default': {
-            'ENGINE': os.environ.get("ENGINE"),
-            'NAME': os.environ.get("NAME"),
-            'USER': os.environ.get("USER"),
-            'PASSWORD': os.environ.get("PASSWORD"),
-            'HOST': os.environ.get("HOST"),
-            'PORT': os.environ.get("PORT"),
+            'ENGINE': os.getenv("ENGINE"),
+            'NAME': os.getenv("NAME"),
+            'USER': os.getenv("USER"),
+            'PASSWORD': os.getenv("PASSWORD"),
+            'HOST': os.getenv("HOST"),
+            'PORT': os.getenv("PORT"),
         }
     }
 else:
@@ -149,5 +149,16 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 #Media
+
+# Base directory of your Django project
+#BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Media settings
 MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# Check if we are in the production environment
+DJANGO_ENV = os.getenv('DJANGO_ENV')
+if DJANGO_ENV == 'production':
+    MEDIA_ROOT = '/home/miksi/media/'
+else:
+    MEDIA_ROOT = os.path.join(BASE_DIR, 'media')

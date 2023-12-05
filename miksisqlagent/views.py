@@ -21,7 +21,7 @@ from .models import UserSignup
 from django.urls import reverse
 from dotenv import load_dotenv
 
-load_dotenv() 
+load_dotenv()
 
 @csrf_exempt
 def signup_view(request):
@@ -61,14 +61,14 @@ def signup_view(request):
             return JsonResponse({
                 'message': 'Signup successful',
                 'status': 200  # 200 OK
-                
+
             })
 
         except ValueError as e:
             return JsonResponse({
                 'message': str(e),
                 'status': 409  # 409 Conflict for duplicate email
-                
+
             })
         except Exception as e:
             # This block will catch other exceptions that might occur
@@ -79,7 +79,7 @@ def signup_view(request):
             })
 
 
-# Log in the User 
+# Log in the User
 
 @csrf_exempt
 def login_view(request):
@@ -106,7 +106,7 @@ def login_view(request):
             return redirect(next_page)
         else:
             return JsonResponse({'message': 'Check your login details'}, status=401)
-        
+
     next_page = request.GET.get('next') or '/'
     context = {'next': next_page}
     return render(request, 'login.html', context)
@@ -118,9 +118,10 @@ from miksisdk.base import DatabaseConnector
 
 # Database Credentials
 db_password = os.getenv("password")
+print("Hosted password", db_password)
 db_user = os.getenv("db_user")
 db_host = os.getenv("db_host")
-db_name = os.getenv("db_name")
+db_name = os.getenv("database_name")
 
 
 
@@ -141,7 +142,7 @@ def get_connection_status():
 def check_database_connection_status():
     status = get_connection_status()
     return status
-    
+
 @csrf_exempt
 def check_database_connection_status(request):
     # Check if user is logged in via session
@@ -164,6 +165,8 @@ def check_database_connection_status(request):
 miksi_api_key = os.getenv("miksi_api_key")
 
 
+
+
 from miksisdk.api import MiksiAPIHandler
 from miksisdk.agent import AgentInitializer
 
@@ -184,7 +187,9 @@ def create_agent():
         if llm is None:
             raise ValueError("Getting default LLM failed")
 
-        agent_initializer = AgentInitializer(llm, db, miksi_api_key=miksi_api_key)
+        path = '/home/miksi/Miksi-SDK-in-Production/media/images'
+
+        agent_initializer = AgentInitializer(llm, db, miksi_api_key=miksi_api_key, path = path)
         print("agent_initializer: ", agent_initializer)
         agent = agent_initializer.create_agent()
         print('agent: ', agent)
@@ -201,6 +206,53 @@ def create_agent():
 
 from django.conf import settings
 
+images_dir = os.path.join(settings.MEDIA_ROOT, 'images')
+print("The images are in: ", images_dir)
+
+@csrf_exempt
+def process_request(request):
+    # Check if user is logged in via session
+    # ... your login check logic ...
+
+    # Check if query is provided
+    query = request.POST.get("query")
+    if not query:
+        return JsonResponse({'error': 'No query provided'}, status=400)
+
+    # Use the MEDIA_ROOT from settings to get the initial state of the directory
+    images_dir = os.path.join(settings.MEDIA_ROOT, 'images')
+    print("The images are in: ", images_dir)
+    initial_files = {f: os.path.getmtime(os.path.join(images_dir, f))
+                     for f in os.listdir(images_dir) if os.path.isfile(os.path.join(images_dir, f))}
+
+    try:
+        # Create an agent and run it with the query
+        # ... your agent creation and execution logic ...
+        agent = create_agent()  # Assuming create_agent() is defined elsewhere
+        response = agent.run(query)
+    except Exception as e:
+        # Handle any errors during agent creation or execution
+        return JsonResponse({'error': 'Error processing request', 'details': str(e)}, status=500)
+
+    # Check the directory after execution using MEDIA_ROOT
+    final_files = {f: os.path.getmtime(os.path.join(images_dir, f))
+                   for f in os.listdir(images_dir) if os.path.isfile(os.path.join(images_dir, f))}
+
+    # Detect new or modified files
+    new_or_modified_files = [f for f in final_files if f not in initial_files or final_files[f] != initial_files.get(f)]
+
+    # Prepare the response
+    response_data = {'response': response}
+
+    # If there's a new or modified file, add its path to the response
+    if new_or_modified_files:
+        new_file = new_or_modified_files[0]  # First new or modified file
+        image_url = os.path.join(settings.MEDIA_URL, 'images', new_file)
+        response_data['image'] = request.build_absolute_uri(image_url)
+
+    return JsonResponse(response_data)
+
+'''
 @csrf_exempt
 def process_request(request):
     # Check if user is logged in via session
@@ -212,22 +264,22 @@ def process_request(request):
 
     # Get the initial state of the directory
     images_dir = os.path.join(settings.BASE_DIR, 'media/images')
-    initial_files = {f: os.path.getmtime(os.path.join(images_dir, f)) 
+    initial_files = {f: os.path.getmtime(os.path.join(images_dir, f))
                      for f in os.listdir(images_dir) if os.path.isfile(os.path.join(images_dir, f))}
 
     try:
         # Create an agent and run it with the query
         print("before agent status")
-        agent = create_agent()  
+        agent = create_agent()
         print("agent created")
-        response = agent.run(query) 
+        response = agent.run(query)
         print("response obtained")
     except Exception as e:
         # Handle any errors during agent creation or execution
         return JsonResponse({'error': 'Error processing request', 'details': str(e)}, status=500)
 
     # Check the directory after execution
-    final_files = {f: os.path.getmtime(os.path.join(images_dir, f)) 
+    final_files = {f: os.path.getmtime(os.path.join(images_dir, f))
                    for f in os.listdir(images_dir) if os.path.isfile(os.path.join(images_dir, f))}
 
     # Detect new or modified files
@@ -243,6 +295,7 @@ def process_request(request):
         response_data['image'] = request.build_absolute_uri(image_url)
 
     return JsonResponse(response_data)
+'''
 
 # Render templates
 def render_signup(request):
