@@ -9,6 +9,12 @@ __pycache__/
 #Media
 media/
 
+.~lock.Metakocka.xlsx#
+Metakocka.xlsx
+
+db_cache.pkl
+db.sqlite3
+
 instructions.txt
 
 

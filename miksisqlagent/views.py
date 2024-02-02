@@ -114,188 +114,163 @@ def login_view(request):
     return JsonResponse({'message': 'Invalid request'}, status=400)
 
 # Connect to the database
-from miksisdk.base import DatabaseConnector
+from miksisdk.base import MySQLDatabaseConnector
 
-# Database Credentials
-db_password = os.getenv("password")
-print("Hosted password", db_password)
+# Load Database Credentials
+db_password = os.getenv("db_password")
 db_user = os.getenv("db_user")
 db_host = os.getenv("db_host")
-db_name = os.getenv("database_name")
+db_name = os.getenv("db_name")
 
+#Establish connection to the db
+def connect():
+     connector = MySQLDatabaseConnector(db_user=db_user, db_password=db_password, 
+                                        db_host=db_host, db_name=db_name) 
+     status = connector.connect()
+     return status
 
-
-def get_db():
-    connector = DatabaseConnector(db_user=db_user, db_password=db_password,
-                                  db_host=db_host, db_name=db_name)
-    db = connector.getdbinstance()
-    return db
-
-
-def get_connection_status():
-    connector = DatabaseConnector(db_user=db_user, db_password=db_password,
-                                  db_host=db_host, db_name=db_name)
-    status = connector.connect()
-    return status
-
-
-def check_database_connection_status():
-    status = get_connection_status()
-    return status
-
-@csrf_exempt
-def check_database_connection_status(request):
-    # Check if user is logged in via session
-    user_id = request.session.get('user_id')
-    if not user_id:
-        # Return a JSON response indicating the user is not logged in
-        return JsonResponse({'error': 'User not logged in'}, status=401)
-
-    try:
-        # Check database connection status
-        status = get_connection_status()
-    except Exception as e:
-        # Handle exceptions and return an error in JSON format
-        return JsonResponse({'error': 'Database connection error', 'details': str(e)}, status=500)
-
-    # Return a JSON response with the status of the database connection
-    return JsonResponse({'status': 'connected' if status else 'not connected'})
-
+status = connect() 
+print (status)
 
 miksi_api_key = os.getenv("miksi_api_key")
+print(miksi_api_key)
 
+#Get an instabce of the db
+def get_db():
+     connector = MySQLDatabaseConnector(db_user=db_user, db_password=db_password,
+                                         db_host=db_host, db_name=db_name) 
+     db = connector.getdbinstance()
+     return db
 
+db = get_db()
 
-
+# Check if api key is valid
 from miksisdk.api import MiksiAPIHandler
-from miksisdk.agent import AgentInitializer
+from llama_index.llms import AzureOpenAI
+import os
 
-def create_agent():
+miksi_api_response = MiksiAPIHandler(miksi_api_key=miksi_api_key)
+miksi_api_key_status = miksi_api_response.validate_miksi_api_key()
+print(f"Key status: {miksi_api_key_status}")
+
+os.environ["OPENAI_API_KEY"] = os.getenv("openai_api_key")
+os.environ["AZURE_OPENAI_ENDPOINT"] = "https://miksi.openai.azure.com/"
+os.environ["OPENAI_API_VERSION"] = "2023-07-01-preview"
+
+azure_llm = AzureOpenAI( engine="miksisdk", model="gpt-35-turbo-16k", temperature=0.0,
+                   azure_endpoint="https://miksi.openai.azure.com/",
+                    api_key=os.getenv("azure_openai_key"),
+                    api_version="2023-07-01-preview", )
+
+
+from miksisdk.agent import CreateChatAgent
+from django.http import JsonResponse
+from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_exempt
+
+# The function to processs query using llama_agent
+@csrf_exempt
+@require_http_methods(["POST"])
+def query_api(request):
+    # Check if the query exists and is not empty
+    query = request.POST.get('query', '')
+    llm = azure_llm
+    if not query:
+        return JsonResponse({'error': 'Query is required and cannot be empty'}, status=400)
+    
     try:
+        # Attempt to connect to the database and create the agent
         db = get_db()
-        print("db", db)
         if db is None:
             raise ValueError("Database connection failed")
+        
+        # Initialize the agent and query engine
+        agent = CreateChatAgent(db=db, miksi_api_key=miksi_api_key)
+        query_engine = agent.create_query_engine()
+        
+        # Execute the query
+        response = query_engine.query(query)
 
-        model = MiksiAPIHandler(miksi_api_key=miksi_api_key)
-        print("model: ", model)
-        if model is None:
-            raise ValueError("MiksiAPIHandler initialization failed")
+        # Extracting information from the response
+        main_response = response.response
+        sql_query = response.metadata['sql_query']
 
-        llm = model.get_default_llm(miksi_api_key=miksi_api_key)
-        print("llm: ", llm)
-        if llm is None:
-            raise ValueError("Getting default LLM failed")
-
-        path = '/home/miksi/Miksi-SDK-in-Production/media/images'
-
-        agent_initializer = AgentInitializer(llm, db, miksi_api_key=miksi_api_key, path = path)
-        print("agent_initializer: ", agent_initializer)
-        agent = agent_initializer.create_agent()
-        print('agent: ', agent)
-        if agent is None:
-            raise ValueError("Agent creation failed")
+        # Return the structured response and SQL query in JSON format
+        return JsonResponse({
+            'main_response': main_response,
+            'sql_query': sql_query,
+        })
 
     except Exception as e:
-        print("exception: ", e)
-        # Return a JSON response with the error details
-        return JsonResponse({'error': 'Error during agent creation process', 'details': str(e)}, status=500)
+        return JsonResponse({'error': str(e)}, status=500)
 
-    # If everything went well, return a success response
-    return agent
+from miksisdk.graphtool import MySQLDatabaseGraphTool
+from miksisdk.agent import CreateGraphAgent, run_agent
+from pandasai.llm import OpenAI
+import logging
+
+try:
+     db_tool = MySQLDatabaseGraphTool(username=db_user, password=db_password, 
+                                      host=db_host, database=db_name) 
+     db_tool.connect()
+     dfs = db_tool.prepare_data()
+     db_tool.print_table_schemas()
+except Exception as e: logging.error(f"An error occurred: {e}")
+
+user_defined_path='media/images'
+pandas_llm = OpenAI(api_token=os.getenv("openai_api_key"))
+
+agent_instance = CreateGraphAgent(miksi_api_key=miksi_api_key, prepared_data= dfs,
+                                   llm= pandas_llm, user_defined_path=user_defined_path)
+
+agent = agent_instance.create_graph_engine()
+
+def run_graph_agent(query):
+    response = run_agent(agent,question=query)
+    return response
+
+DJANGO_ENV = os.getenv('DJANGO_ENV')
+
 
 from django.conf import settings
 
-images_dir = os.path.join(settings.MEDIA_ROOT, 'images')
-print("The images are in: ", images_dir)
-
 @csrf_exempt
-def process_request(request):
-    # Check if user is logged in via session
-    # ... your login check logic ...
-
-    # Check if query is provided
-    query = request.POST.get("query")
+def run_graph_agent(request):
+    query = request.POST.get('query', '')
     if not query:
-        return JsonResponse({'error': 'No query provided'}, status=400)
-
-    # Use the MEDIA_ROOT from settings to get the initial state of the directory
-    images_dir = os.path.join(settings.MEDIA_ROOT, 'images')
-    print("The images are in: ", images_dir)
-    initial_files = {f: os.path.getmtime(os.path.join(images_dir, f))
-                     for f in os.listdir(images_dir) if os.path.isfile(os.path.join(images_dir, f))}
-
+        return JsonResponse({'error': 'Query is required and cannot be empty'}, status=400)
     try:
-        # Create an agent and run it with the query
-        # ... your agent creation and execution logic ...
-        agent = create_agent()  # Assuming create_agent() is defined elsewhere
-        response = agent.run(query)
+        # Use the MEDIA_ROOT from settings to get the initial state of the directory
+        images_dir = os.path.join(settings.MEDIA_ROOT, 'images')
+        print("The images are in: ", images_dir)
+        initial_files = {f: os.path.getmtime(os.path.join(images_dir, f))
+                         for f in os.listdir(images_dir) if os.path.isfile(os.path.join(images_dir, f))}
+        
+        # Run the agent, which might create or modify files
+        response = run_agent(agent, question=query)
+        
+        # Check the directory after execution
+        final_files = {f: os.path.getmtime(os.path.join(images_dir, f))
+                       for f in os.listdir(images_dir) if os.path.isfile(os.path.join(images_dir, f))}
+        
+        # Detect new or modified files
+        new_or_modified_files = [f for f in final_files if f not in initial_files or final_files[f] != initial_files.get(f)]
+        
+        # Prepare the response data
+        response_data = {'response': response}
+        
+        # If there's a new or modified file, add its path to the response
+        if new_or_modified_files:
+            new_file = new_or_modified_files[0]  # Assuming we only care about the first new or modified file
+            image_url = os.path.join(settings.MEDIA_URL, 'images', new_file)
+            response_data['image'] = request.build_absolute_uri(image_url)
+        
+        return JsonResponse(response_data)
+    
     except Exception as e:
-        # Handle any errors during agent creation or execution
-        return JsonResponse({'error': 'Error processing request', 'details': str(e)}, status=500)
+        # Handle any potential errors gracefully
+        return JsonResponse({'error': str(e)}, status=500)
 
-    # Check the directory after execution using MEDIA_ROOT
-    final_files = {f: os.path.getmtime(os.path.join(images_dir, f))
-                   for f in os.listdir(images_dir) if os.path.isfile(os.path.join(images_dir, f))}
-
-    # Detect new or modified files
-    new_or_modified_files = [f for f in final_files if f not in initial_files or final_files[f] != initial_files.get(f)]
-
-    # Prepare the response
-    response_data = {'response': response}
-
-    # If there's a new or modified file, add its path to the response
-    if new_or_modified_files:
-        new_file = new_or_modified_files[0]  # First new or modified file
-        image_url = os.path.join(settings.MEDIA_URL, 'images', new_file)
-        response_data['image'] = request.build_absolute_uri(image_url)
-
-    return JsonResponse(response_data)
-
-'''
-@csrf_exempt
-def process_request(request):
-    # Check if user is logged in via session
-
-    # Check if query is provided
-    query = request.POST.get("query")
-    if not query:
-        return JsonResponse({'error': 'No query provided'}, status=400)
-
-    # Get the initial state of the directory
-    images_dir = os.path.join(settings.BASE_DIR, 'media/images')
-    initial_files = {f: os.path.getmtime(os.path.join(images_dir, f))
-                     for f in os.listdir(images_dir) if os.path.isfile(os.path.join(images_dir, f))}
-
-    try:
-        # Create an agent and run it with the query
-        print("before agent status")
-        agent = create_agent()
-        print("agent created")
-        response = agent.run(query)
-        print("response obtained")
-    except Exception as e:
-        # Handle any errors during agent creation or execution
-        return JsonResponse({'error': 'Error processing request', 'details': str(e)}, status=500)
-
-    # Check the directory after execution
-    final_files = {f: os.path.getmtime(os.path.join(images_dir, f))
-                   for f in os.listdir(images_dir) if os.path.isfile(os.path.join(images_dir, f))}
-
-    # Detect new or modified files
-    new_or_modified_files = [f for f in final_files if f not in initial_files or final_files[f] != initial_files.get(f)]
-
-    # Prepare the response
-    response_data = {'response': response}
-
-    # If there's a new or modified file, add its path to the response
-    if new_or_modified_files:
-        new_file = new_or_modified_files[0]  # First new or modified file
-        image_url = settings.MEDIA_URL + 'images/' + new_file
-        response_data['image'] = request.build_absolute_uri(image_url)
-
-    return JsonResponse(response_data)
-'''
 
 # Render templates
 def render_signup(request):

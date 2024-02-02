@@ -5,17 +5,30 @@
     <!-- Bootstrap CSS -->
     <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        /* Inline CSS for styling */
+        body {
+            background-color: #f7f7f7;
+        }
+        #legend {
+            text-align: center;
+            padding: 20px;
+            margin-bottom: 10px;
+            background-color: #007bff;
+            color: white;
+            border-radius: 5px;
+            box-shadow: 0px 0px 10px 0px rgba(0,0,0,0.15);
+        }
         #chat-area {
-            height: 500px; /* Increased height */
+            height: 500px;
             overflow-y: auto;
             border: 1px solid #ccc;
-            padding: 15px; /* Increased padding for better margin */
-            margin-bottom: 20px; /* Increased margin */
+            padding: 15px;
+            margin-bottom: 20px;
+            background-color: white;
+            box-shadow: 0px 0px 10px 0px rgba(0,0,0,0.15);
         }
         .message {
-            margin: 10px; /* Increased margin */
-            padding: 10px; /* Increased padding */
+            margin: 10px 0;
+            padding: 10px;
             border-radius: 10px;
         }
         .sent {
@@ -27,23 +40,43 @@
         .message-text {
             display: inline-block;
             max-width: 70%;
-            padding: 10px; /* Increased padding */
+            padding: 10px;
             border-radius: 12px;
+        }
+        .sent .message-text {
+            background-color: #007bff;
+            color: white;
+        }
+        .received .message-text {
+            background-color: #f8f9fa;
         }
         .spinner-border {
             display: none;
             width: 1.5rem;
             height: 1.5rem;
         }
+        #api-selection .btn {
+            width: 49%; /* Make buttons equally divided and aligned in the container */
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div id="chat-area"></div>
+    <div class="container my-4">
+        <div id="legend">Chat with your Data</div>
+        <!-- API selection buttons -->
+        <div id="api-selection" class="btn-group btn-group-toggle mb-3" data-toggle="buttons">
+            <label class="btn btn-primary active">
+                <input type="radio" name="api-option" id="query-api" value="query_api" data-url="{% url 'query_api' %}" checked> Chat
+            </label>
+            <label class="btn btn-primary">
+                <input type="radio" name="api-option" id="graphs-api" value="graphs_api" data-url="{% url 'graphs_api' %}"> Graphs
+            </label>            
+        </div>
+        <div id="chat-area" class="rounded"></div>
         <div class="input-group mb-3">
-            <input type="text" id="message-input" class="form-control" placeholder="Enter your message...">
+            <input type="text" id="message-input" class="form-control" placeholder="Enter your message..." aria-label="Recipient's username" aria-describedby="button-addon2">
             <div class="input-group-append">
-                <button class="btn btn-outline-secondary" type="button" id="send-button">Send</button>
+                <button class="btn btn-outline-primary" type="button" id="send-button">Send</button>
                 <div class="spinner-border text-primary" role="status" id="loading-spinner">
                     <span class="sr-only">Loading...</span>
                 </div>
@@ -58,22 +91,62 @@
 
     <script>
         $(document).ready(function() {
+            function scrollToBottom() {
+                $("#chat-area").scrollTop($("#chat-area")[0].scrollHeight);
+            }
+
+            function handleResponse(data, isGraph) {
+                let responseHtml = '<div class="message received"><span class="message-text">';
+                if (isGraph) {
+                    // Assume data.response is already parsed as part of the response handling.
+                    let graphResponse;
+                    try {
+                        graphResponse = JSON.parse(data.response);
+                        // Display the 'answer' (image path) distinctly, if needed.
+                        if (data.image) {
+                            responseHtml += '<img src="' + data.image + '" style="max-width: 100%; height: auto;"><br>';
+                        } else {
+                            responseHtml += "No image returned.<br>"; // Indicate no image was returned.
+                        }
+                        // Append the explanation after the image.
+                        responseHtml += "<strong>Explanation:</strong> " + (graphResponse.explanation || "No explanation provided.");
+                    } catch (error) {
+                        console.error("Error parsing graph response:", error);
+                        responseHtml += "Error in response data.";
+                    }
+                } else if (!isGraph && data.main_response) {
+                    // Display the main response.
+                    responseHtml += data.main_response + '<br>';
+                    // Display the SQL query distinctly in a code block for better readability.
+                    if (data.sql_query) {
+                        responseHtml += '<br><strong>SQL Query:</strong><pre>' + data.sql_query + '</pre>';
+                    }
+                } else if (data.error) {
+                    responseHtml += data.error;
+                } else {
+                    responseHtml += "No response";
+                }
+                responseHtml += '</span></div>';
+                $('#chat-area').append(responseHtml);
+                scrollToBottom();
+            }
+
             function sendMessage() {
                 var message = $('#message-input').val();
+                var selectedOption = $('input[name="api-option"]:checked');
+                var apiUrl = selectedOption.attr('data-url'); // Use the data-url attribute
+
                 if (message) {
-                    $('#chat-area').append('<div class="message sent"><span class="message-text bg-primary text-white">' + message + '</span></div>');
+                    $('#chat-area').append('<div class="message sent"><span class="message-text">' + message + '</span></div>');
                     $('#message-input').val('');
+                    scrollToBottom();
+
                     $('#message-input').prop('disabled', true);
                     $('#send-button').prop('disabled', true);
                     $('#loading-spinner').show();
 
-                    $.post("{% url 'chat_database' %}", { query: message }, function(data) {
-                        var responseHtml = '<div class="message received"><span class="message-text bg-light">';
-                        if (data.image) {
-                            responseHtml += '<img src="' + data.image + '" style="max-width: 100%; height: auto;"><br>';
-                        }
-                        responseHtml += data.response + '</span></div>';
-                        $('#chat-area').append(responseHtml);
+                    $.post(apiUrl, { query: message }, function(data) {
+                        handleResponse(data, selectedOption.val() === 'graphs_api');
                     }).always(function() {
                         $('#message-input').prop('disabled', false);
                         $('#send-button').prop('disabled', false);
@@ -82,12 +155,13 @@
                 }
             }
 
+
             $('#send-button').click(sendMessage);
 
             $('#message-input').keypress(function(e) {
-                if (e.which == 13) { // Enter key pressed
+                if (e.which == 13) {
                     sendMessage();
-                    return false; // Prevent form submit
+                    return false;
                 }
             });
         });

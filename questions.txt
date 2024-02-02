@@ -1,0 +1,31 @@
+
+What is the total amount charged across all transactions?
+
+Which transaction had the highest charge in the original monetary unit?
+
+On what date did the most transactions occur?
+
+What is the average good amount in domestic currency per transaction?
+
+Which book description appears most frequently in the transactions?
+
+Who is the most common customer (based on 'Client' column) in the dataset?
+
+Which account was used most frequently for transactions?
+
+What is the range of transaction amounts in the domestic currency?
+
+How many transactions were closed (based on the 'Closing' column)?
+
+Which employee (from 'A worker' column) was involved in the highest number of transactions?
+
+
+Graphs 
+
+Are there significant differences in transaction types or amounts among different abbreviations for monetary units?
+Show this using a graph
+
+Trend Analysis Over Time:
+
+Can you create a line graph showing the trend of total transaction amounts over time (e.g., monthly or weekly)?
+
