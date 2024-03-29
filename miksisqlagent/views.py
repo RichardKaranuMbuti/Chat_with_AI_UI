@@ -121,24 +121,26 @@ db_password = os.getenv("db_password")
 db_user = os.getenv("db_user")
 db_host = os.getenv("db_host")
 db_name = os.getenv("db_name")
+print(db_name)
 
 #Establish connection to the db
 def connect():
-     connector = MySQLDatabaseConnector(db_user=db_user, db_password=db_password, 
-                                        db_host=db_host, db_name=db_name) 
+     connector = MySQLDatabaseConnector(db_user=db_user, db_password=db_password,
+                                        db_host=db_host, db_name=db_name)
      status = connector.connect()
      return status
 
-status = connect() 
+status = connect()
 print (status)
-
+print("This is the checkpoint>>>>.........HERE ")
+print(db_name)
 miksi_api_key = os.getenv("miksi_api_key")
 print(miksi_api_key)
 
 #Get an instabce of the db
 def get_db():
      connector = MySQLDatabaseConnector(db_user=db_user, db_password=db_password,
-                                         db_host=db_host, db_name=db_name) 
+                                         db_host=db_host, db_name=db_name)
      db = connector.getdbinstance()
      return db
 
@@ -177,17 +179,17 @@ def query_api(request):
     llm = azure_llm
     if not query:
         return JsonResponse({'error': 'Query is required and cannot be empty'}, status=400)
-    
+
     try:
         # Attempt to connect to the database and create the agent
         db = get_db()
         if db is None:
             raise ValueError("Database connection failed")
-        
+
         # Initialize the agent and query engine
         agent = CreateChatAgent(db=db, miksi_api_key=miksi_api_key)
         query_engine = agent.create_query_engine()
-        
+
         # Execute the query
         response = query_engine.query(query)
 
@@ -210,8 +212,9 @@ from pandasai.llm import OpenAI
 import logging
 
 try:
-     db_tool = MySQLDatabaseGraphTool(username=db_user, password=db_password, 
-                                      host=db_host, database=db_name) 
+     db_tool = MySQLDatabaseGraphTool(username=db_user, password=db_password,
+                                      host=db_host, database=db_name)
+     print(f"db_tool: {db_tool} ")
      db_tool.connect()
      dfs = db_tool.prepare_data()
      db_tool.print_table_schemas()
@@ -245,28 +248,28 @@ def run_graph_agent(request):
         print("The images are in: ", images_dir)
         initial_files = {f: os.path.getmtime(os.path.join(images_dir, f))
                          for f in os.listdir(images_dir) if os.path.isfile(os.path.join(images_dir, f))}
-        
+
         # Run the agent, which might create or modify files
         response = run_agent(agent, question=query)
-        
+
         # Check the directory after execution
         final_files = {f: os.path.getmtime(os.path.join(images_dir, f))
                        for f in os.listdir(images_dir) if os.path.isfile(os.path.join(images_dir, f))}
-        
+
         # Detect new or modified files
         new_or_modified_files = [f for f in final_files if f not in initial_files or final_files[f] != initial_files.get(f)]
-        
+
         # Prepare the response data
         response_data = {'response': response}
-        
+
         # If there's a new or modified file, add its path to the response
         if new_or_modified_files:
             new_file = new_or_modified_files[0]  # Assuming we only care about the first new or modified file
             image_url = os.path.join(settings.MEDIA_URL, 'images', new_file)
             response_data['image'] = request.build_absolute_uri(image_url)
-        
+
         return JsonResponse(response_data)
-    
+
     except Exception as e:
         # Handle any potential errors gracefully
         return JsonResponse({'error': str(e)}, status=500)

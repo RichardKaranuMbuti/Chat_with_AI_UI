@@ -4,13 +4,13 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from dotenv import load_dotenv
-load_dotenv() 
+load_dotenv()
 
 # Replace the following with your MySQL server details
 username = os.getenv("db_user")
 password = os.getenv("db_password")
 host = os.getenv("db_host")
-database_name = 'sales_data'  
+database_name = os.getenv("db_name")
 # Creating the database connection string
 connection_string = f'mysql+mysqlconnector://{username}:{password}@{host}/'
 
@@ -51,12 +51,12 @@ def process_csv_files(folder_path, engine, database_name):
 if __name__ == "__main__":
     # Path to the folder containing your CSV files
     folder_path = 'data'  # Replace with the path to your folder
-    
+
     # Create the database (if it doesn't exist)
     create_database(engine, database_name)
-    
+
     # Adjust engine for the specific database
     engine = create_engine(f"{connection_string}{database_name}")
-    
+
     # Process CSV files
     process_csv_files(folder_path, engine, database_name)
