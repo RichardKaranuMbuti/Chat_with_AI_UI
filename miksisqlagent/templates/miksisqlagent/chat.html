@@ -2,7 +2,6 @@
 <html>
 <head>
     <title>Chat Agent</title>
-    <!-- Bootstrap CSS -->
     <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body {
@@ -50,31 +49,41 @@
         .received .message-text {
             background-color: #f8f9fa;
         }
+        .code-block {
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            padding: 10px;
+            white-space: pre-wrap;
+            text-align: left;
+            margin-top: 10px;
+        }
+        .images-grid {
+            display: grid;
+            grid-gap: 10px;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            margin-bottom: 20px;
+        }
+        .images-grid img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+        }
         .spinner-border {
             display: none;
             width: 1.5rem;
             height: 1.5rem;
-        }
-        #api-selection .btn {
-            width: 49%; /* Make buttons equally divided and aligned in the container */
         }
     </style>
 </head>
 <body>
     <div class="container my-4">
         <div id="legend">Chat with your Data</div>
-        <!-- API selection buttons -->
-        <div id="api-selection" class="btn-group btn-group-toggle mb-3" data-toggle="buttons">
-            <label class="btn btn-primary active">
-                <input type="radio" name="api-option" id="query-api" value="query_api" data-url="{% url 'query_api' %}" checked> Chat
-            </label>
-            <label class="btn btn-primary">
-                <input type="radio" name="api-option" id="graphs-api" value="graphs_api" data-url="{% url 'graphs_api' %}"> Graphs
-            </label>            
-        </div>
         <div id="chat-area" class="rounded"></div>
         <div class="input-group mb-3">
-            <input type="text" id="message-input" class="form-control" placeholder="Enter your message..." aria-label="Recipient's username" aria-describedby="button-addon2">
+            <input type="text" id="instructions-input" class="form-control" placeholder="Enter your instructions..." aria-label="Instructions">
+        </div>
+        <div class="input-group mb-3">
+            <input type="text" id="query-input" class="form-control" placeholder="Enter your query..." aria-label="Query">
             <div class="input-group-append">
                 <button class="btn btn-outline-primary" type="button" id="send-button">Send</button>
                 <div class="spinner-border text-primary" role="status" id="loading-spinner">
@@ -84,7 +93,6 @@
         </div>
     </div>
 
-    <!-- Bootstrap and jQuery -->
     <script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"></script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
@@ -95,70 +103,78 @@
                 $("#chat-area").scrollTop($("#chat-area")[0].scrollHeight);
             }
 
-            function handleResponse(data, isGraph) {
-                let responseHtml = '<div class="message received"><span class="message-text">';
-                if (isGraph) {
-                    // Assume data.response is already parsed as part of the response handling.
-                    let graphResponse;
-                    try {
-                        graphResponse = JSON.parse(data.response);
-                        // Display the 'answer' (image path) distinctly, if needed.
-                        if (data.image) {
-                            responseHtml += '<img src="' + data.image + '" style="max-width: 100%; height: auto;"><br>';
-                        } else {
-                            responseHtml += "No image returned.<br>"; // Indicate no image was returned.
-                        }
-                        // Append the explanation after the image.
-                        responseHtml += "<strong>Explanation:</strong> " + (graphResponse.explanation || "No explanation provided.");
-                    } catch (error) {
-                        console.error("Error parsing graph response:", error);
-                        responseHtml += "Error in response data.";
-                    }
-                } else if (!isGraph && data.main_response) {
-                    // Display the main response.
-                    responseHtml += data.main_response + '<br>';
-                    // Display the SQL query distinctly in a code block for better readability.
-                    if (data.sql_query) {
-                        responseHtml += '<br><strong>SQL Query:</strong><pre>' + data.sql_query + '</pre>';
-                    }
-                } else if (data.error) {
-                    responseHtml += data.error;
-                } else {
-                    responseHtml += "No response";
+            function displayCodeOrQuery(data, type) {
+                let contentHtml = '<div class="code-block">';
+                if (type === 'sql') {
+                    contentHtml += '<strong>SQL Queries:</strong><br>';
+                    data.forEach(function(query) {
+                        contentHtml += '<pre>' + query + '</pre>';
+                    });
+                } else if (type === 'python') {
+                    contentHtml += '<strong>Python Code:</strong><br><pre>' + data + '</pre>';
                 }
-                responseHtml += '</span></div>';
+                contentHtml += '</div>';
+                return contentHtml;
+            }
+
+            function handleResponse(data) {
+                let response = data; // response is already the correct dictionary
+                let responseHtml = '<div class="message received"><span class="message-text">' + response.output + '</span></div>';
+
+                // Adding images if present
+                if (response.image_path && response.image_path.length > 0) {
+                    responseHtml += '<div class="images-grid">';
+                    response.image_path.forEach(function(image) {
+                        responseHtml += '<img src="' + image + '">';
+                    });
+                    responseHtml += '</div>';
+                }
+
+                // Show buttons if SQL or Python code is present
+                if (response.generated_query && response.generated_query.length > 0) {
+                    responseHtml += '<button class="btn btn-outline-secondary mb-3" type="button" data-toggle="collapse" data-target="#sqlQueries" aria-expanded="false" aria-controls="sqlQueries">Show SQL Queries</button>';
+                    responseHtml += '<div class="collapse" id="sqlQueries">' + displayCodeOrQuery(response.generated_query, 'sql') + '</div>';
+                }
+                if (response.python_code) {
+                    responseHtml += '<button class="btn btn-outline-secondary mb-3" type="button" data-toggle="collapse" data-target="#pythonCode" aria-expanded="false" aria-controls="pythonCode">Show Python Code</button>';
+                    responseHtml += '<div class="collapse" id="pythonCode">' + displayCodeOrQuery(response.python_code, 'python') + '</div>';
+                }
+
                 $('#chat-area').append(responseHtml);
                 scrollToBottom();
             }
 
             function sendMessage() {
-                var message = $('#message-input').val();
-                var selectedOption = $('input[name="api-option"]:checked');
-                var apiUrl = selectedOption.attr('data-url'); // Use the data-url attribute
-
-                if (message) {
-                    $('#chat-area').append('<div class="message sent"><span class="message-text">' + message + '</span></div>');
-                    $('#message-input').val('');
+                var instructions = $('#instructions-input').val();
+                var query = $('#query-input').val();
+                if (query) {
+                    $('#chat-area').append('<div class="message sent"><span class="message-text">' + query + '</span></div>');
+                    $('#instructions-input').val('');
+                    $('#query-input').val('');
                     scrollToBottom();
 
-                    $('#message-input').prop('disabled', true);
+                    $('#instructions-input').prop('disabled', true);
+                    $('#query-input').prop('disabled', true);
                     $('#send-button').prop('disabled', true);
                     $('#loading-spinner').show();
 
-                    $.post(apiUrl, { query: message }, function(data) {
-                        handleResponse(data, selectedOption.val() === 'graphs_api');
+                    var apiUrl = "{% url 'process_questions' %}"; // The endpoint for processing questions
+                    $.post(apiUrl, { instructions: instructions, query: query }, function(data) {
+                        handleResponse(data);
                     }).always(function() {
-                        $('#message-input').prop('disabled', false);
+                        $('#instructions-input').prop('disabled', false);
+                        $('#query-input').prop('disabled', false);
                         $('#send-button').prop('disabled', false);
                         $('#loading-spinner').hide();
                     });
+                } else {
+                    alert("Query cannot be empty");
                 }
             }
 
-
             $('#send-button').click(sendMessage);
 
-            $('#message-input').keypress(function(e) {
+            $('#query-input').keypress(function(e) {
                 if (e.which == 13) {
                     sendMessage();
                     return false;

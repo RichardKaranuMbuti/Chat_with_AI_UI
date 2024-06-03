@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Initialize Chat Agent</title>
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f7f7f7;
+        }
+        .container {
+            max-width: 600px;
+            margin-top: 20px;
+        }
+        .spinner {
+            display: none;
+            margin-left: 5px;
+        }
+        .alert-box {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2 class="mb-4">Initialize Chat Agent</h2>
+        <div class="input-group mb-3">
+            <input type="text" class="form-control" id="instructions" placeholder="Enter Initialization Instructions">
+            <div class="input-group-append">
+                <button class="btn btn-outline-secondary" type="button" id="initialize-agent-btn">Initialize</button>
+                <span class="spinner spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+            </div>
+        </div>
+        <div class="alert-box"></div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            $('#initialize-agent-btn').click(function() {
+                var instructions = $('#instructions').val();
+                $('.spinner').show();
+
+                $.ajax({
+                    type: "POST",
+                    url: "/sqlagent/init_agent/", // Adjust according to your URL configuration
+                    data: { instructions: instructions },
+                    success: function(response) {
+                        $('.alert-box').html('<div class="alert alert-success" role="alert">Agent Initialized Successfully!</div>');
+                        $('.spinner').hide();
+                    },
+                    error: function(xhr, status, error) {
+                        $('.alert-box').html('<div class="alert alert-danger" role="alert">Error Initializing Agent: ' + error + '</div>');
+                        $('.spinner').hide();
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>

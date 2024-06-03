@@ -113,168 +113,184 @@ def login_view(request):
 
     return JsonResponse({'message': 'Invalid request'}, status=400)
 
-# Connect to the database
-from miksisdk.base import MySQLDatabaseConnector
+
+
 
 # Load Database Credentials
 db_password = os.getenv("db_password")
 db_user = os.getenv("db_user")
-db_host = os.getenv("db_host")
+db_host = 'localhost'
+print(f"db host: {db_host}")
 db_name = os.getenv("db_name")
-print(db_name)
+print(f"db name: {db_name}")
+db_port = 3306
+engine = 'MySQL'
 
-#Establish connection to the db
-def connect():
-     connector = MySQLDatabaseConnector(db_user=db_user, db_password=db_password,
-                                        db_host=db_host, db_name=db_name)
-     status = connector.connect()
-     return status
 
-status = connect()
-print (status)
-print("This is the checkpoint>>>>.........HERE ")
-print(db_name)
-miksi_api_key = os.getenv("miksi_api_key")
+
+miksi_api_key = os.getenv('miksi_api_key')
 print(miksi_api_key)
 
-#Get an instabce of the db
-def get_db():
-     connector = MySQLDatabaseConnector(db_user=db_user, db_password=db_password,
-                                         db_host=db_host, db_name=db_name)
-     db = connector.getdbinstance()
-     return db
 
-db = get_db()
-
-# Check if api key is valid
-from miksisdk.api import MiksiAPIHandler
-from llama_index.llms import AzureOpenAI
-import os
-
-miksi_api_response = MiksiAPIHandler(miksi_api_key=miksi_api_key)
-miksi_api_key_status = miksi_api_response.validate_miksi_api_key()
-print(f"Key status: {miksi_api_key_status}")
-
-os.environ["OPENAI_API_KEY"] = os.getenv("openai_api_key")
-os.environ["AZURE_OPENAI_ENDPOINT"] = "https://miksi.openai.azure.com/"
-os.environ["OPENAI_API_VERSION"] = "2023-07-01-preview"
-
-azure_llm = AzureOpenAI( engine="miksisdk", model="gpt-35-turbo-16k", temperature=0.0,
-                   azure_endpoint="https://miksi.openai.azure.com/",
-                    api_key=os.getenv("azure_openai_key"),
-                    api_version="2023-07-01-preview", )
-
-
-from miksisdk.agent import CreateChatAgent
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 
-# The function to processs query using llama_agent
+from miksiai.utils import check_connection, set_db
+
+media_path = 'media/images'
+
 @csrf_exempt
-@require_http_methods(["POST"])
-def query_api(request):
-    # Check if the query exists and is not empty
-    query = request.POST.get('query', '')
-    llm = azure_llm
-    if not query:
-        return JsonResponse({'error': 'Query is required and cannot be empty'}, status=400)
+def set_db_and_check_connection(request):
+    if request.method == 'POST':    
+        if not all([db_name, db_user, db_password, db_host, db_port]):
+            return JsonResponse({"error": "All database credentials must be provided."}, status=400)
+        try:
+            set_db(db_name, db_user, db_password, db_host, db_port)
+            status = check_connection(engine=engine)
+            return JsonResponse({"status": status})
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+    else:
+        return JsonResponse({"error": "Method not allowed."}, status=405)
+    
 
-    try:
-        # Attempt to connect to the database and create the agent
-        db = get_db()
-        if db is None:
-            raise ValueError("Database connection failed")
+from miksiai.master import initialize_env
 
-        # Initialize the agent and query engine
-        agent = CreateChatAgent(db=db, miksi_api_key=miksi_api_key)
-        query_engine = agent.create_query_engine()
+env_path = 'venvs'
 
-        # Execute the query
-        response = query_engine.query(query)
 
-        # Extracting information from the response
-        main_response = response.response
-        sql_query = response.metadata['sql_query']
+@csrf_exempt
+def initialize_env_view(request):
+    if request.method == 'POST':
+        try:
+            initialize_env(env_path)
+            return JsonResponse({"message": "Environment initialized successfully."})
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+    else:
+        return JsonResponse({"error": "Method not allowed."}, status=405)
 
-        # Return the structured response and SQL query in JSON format
-        return JsonResponse({
-            'main_response': main_response,
-            'sql_query': sql_query,
-        })
+from miksiai.agent import create_agent, run_agent
 
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+@csrf_exempt
+def process_questions(request):
+    if request.method == 'POST':
+        instructions = request.POST.get('instructions', '')
+        query = request.POST.get('query')
+        print("Received request with instructions and query")
 
-from miksisdk.graphtool import MySQLDatabaseGraphTool
-from miksisdk.agent import CreateGraphAgent, run_agent
-from pandasai.llm import OpenAI
-import logging
+        if not query:
+            return JsonResponse({"error": "Query cannot be empty."}, status=400)
+        
+        if not all([db_name, db_user, db_password, db_host, db_port]):
+            return JsonResponse({"error": "All database credentials must be provided."}, status=400)
+        
+        try:
+            print("Attempting to create agent")
+            agent = create_agent(miksi_api_key=miksi_api_key,
+                                 engine=engine,
+                                 db_name=db_name, db_user=db_user, db_password=db_password,
+                                 db_host=db_host, db_port=db_port, instructions=instructions)
+            print(f"Agent created: {agent}")
+            
+            # Use the MEDIA_ROOT from settings to get the initial state of the directory
+            images_dir = os.path.join(settings.MEDIA_ROOT, 'images')
+            print("The images are in:", images_dir)
+            initial_files = {f: os.path.getmtime(os.path.join(images_dir, f))
+                             for f in os.listdir(images_dir) if os.path.isfile(os.path.join(images_dir, f))}
+            
+            # Run the agent, which might create or modify files
+            response = run_agent(agent, miksi_api_key, query, media_path)
+            print(f"final answer: {response}")
 
-try:
-     db_tool = MySQLDatabaseGraphTool(username=db_user, password=db_password,
-                                      host=db_host, database=db_name)
-     print(f"db_tool: {db_tool} ")
-     db_tool.connect()
-     dfs = db_tool.prepare_data()
-     db_tool.print_table_schemas()
-except Exception as e: logging.error(f"An error occurred: {e}")
+            # At this point, response is already a dictionary
+            if not isinstance(response, dict):
+                return JsonResponse({"error": "Invalid response from agent"}, status=500)
 
-user_defined_path='media/images'
-pandas_llm = OpenAI(api_token=os.getenv("openai_api_key"))
+            response_dict = response
 
-agent_instance = CreateGraphAgent(miksi_api_key=miksi_api_key, prepared_data= dfs,
-                                   llm= pandas_llm, user_defined_path=user_defined_path)
-
-agent = agent_instance.create_graph_engine()
-
-def run_graph_agent(query):
-    response = run_agent(agent,question=query)
-    return response
-
+            # Check the directory after execution
+            final_files = {f: os.path.getmtime(os.path.join(images_dir, f))
+                           for f in os.listdir(images_dir) if os.path.isfile(os.path.join(images_dir, f))}
+            
+            # Detect new or modified files
+            new_or_modified_files = [f for f in final_files if f not in initial_files or final_files[f] != initial_files[f]]
+            
+            # If there are new or modified files, add their paths to the response
+            if new_or_modified_files:
+                image_urls = [request.build_absolute_uri(os.path.join(settings.MEDIA_URL, 'images', f)) for f in new_or_modified_files]
+                response_dict['image_path'] = image_urls
+            
+            return JsonResponse(response_dict)
+        except Exception as e:
+            print(f"Error occurred: {e}")
+            return JsonResponse({"error": str(e)}, status=500)
+    else:
+        return JsonResponse({"error": "Method not allowed."}, status=405)
+    
+    
+    
 DJANGO_ENV = os.getenv('DJANGO_ENV')
 
 
 from django.conf import settings
+import re
 
+def remove_json_formatters(text):
+    # Define the pattern to match ```json at the beginning and ``` at the end.
+    pattern = r'```json|```'
+    
+    # Replace occurrences of the pattern with an empty string.
+    cleaned_text = re.sub(pattern, '', text)
+    
+    return cleaned_text
+
+'''
 @csrf_exempt
-def run_graph_agent(request):
+def process_questions(request):
     query = request.POST.get('query', '')
     if not query:
-        return JsonResponse({'error': 'Query is required and cannot be empty'}, status=400)
+        return JsonResponse({'error': 'No question to process.'}, status=400)
     try:
         # Use the MEDIA_ROOT from settings to get the initial state of the directory
         images_dir = os.path.join(settings.MEDIA_ROOT, 'images')
         print("The images are in: ", images_dir)
         initial_files = {f: os.path.getmtime(os.path.join(images_dir, f))
                          for f in os.listdir(images_dir) if os.path.isfile(os.path.join(images_dir, f))}
-
+        
         # Run the agent, which might create or modify files
-        response = run_agent(agent, question=query)
+        response = remove_json_formatters(run_agent(agent, miksi_api_key, query))
+        print(f"final answer: {response}")
 
+        try:
+            response_dict = json.loads(response)
+        except json.JSONDecodeError:
+            # Handle the error if response is not a valid JSON string
+            response_dict = {}
+        
         # Check the directory after execution
         final_files = {f: os.path.getmtime(os.path.join(images_dir, f))
                        for f in os.listdir(images_dir) if os.path.isfile(os.path.join(images_dir, f))}
-
+        
         # Detect new or modified files
-        new_or_modified_files = [f for f in final_files if f not in initial_files or final_files[f] != initial_files.get(f)]
-
+        new_or_modified_files = [f for f in final_files if f not in initial_files or final_files[f] != initial_files[f]]
+        
         # Prepare the response data
-        response_data = {'response': response}
-
-        # If there's a new or modified file, add its path to the response
+        response_data = {'response': response_dict}
+        
+        # If there are new or modified files, add their paths to the response
         if new_or_modified_files:
-            new_file = new_or_modified_files[0]  # Assuming we only care about the first new or modified file
-            image_url = os.path.join(settings.MEDIA_URL, 'images', new_file)
-            response_data['image'] = request.build_absolute_uri(image_url)
-
+            image_urls = [request.build_absolute_uri(os.path.join(settings.MEDIA_URL, 'images', f)) for f in new_or_modified_files]
+            response_data['images'] = image_urls
+        
         return JsonResponse(response_data)
-
+    
     except Exception as e:
         # Handle any potential errors gracefully
         return JsonResponse({'error': str(e)}, status=500)
 
-
+'''
 # Render templates
 def render_signup(request):
     return render(request, 'miksisqlagent/signup.html')
@@ -288,3 +304,6 @@ def show_login_template(request):
 
 def chat_page(request):
     return render( request, 'miksisqlagent/chat.html')
+
+def setup_page(request):
+    return render( request, 'miksisqlagent/setup.html')
